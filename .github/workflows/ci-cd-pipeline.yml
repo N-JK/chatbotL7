@@ -1,0 +1,89 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+env:
+  AZURE_VM_IP: ${{ secrets.AZURE_VM_IP }}
+  AZURE_VM_USERNAME: ${{ secrets.AZURE_VM_USERNAME }}
+  AZURE_VM_PASSWORD: ${{ secrets.AZURE_VM_PASSWORD }}
+  AZURE_FRONTEND_PACKAGE_PATH: "./chatbot/Front-End/dist"
+  AZURE_BACKEND_PACKAGE_PATH: "./chatbot/Back-End"
+  FRONTEND_PORT: 5173
+  BACKEND_PORT: 5000
+
+jobs:
+  backend:
+    name: Backend Build and Deploy
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout backend code
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '16.x'
+
+      - name: Install dependencies
+        working-directory: ./chatbot/Back-End
+        run: npm install
+
+      - name: Start backend for deployment validation
+        working-directory: ./chatbot/Back-End
+        run: |
+          npm start &
+          timeout /t 10 # Allow time for the server to start
+          curl -I http://localhost:5000
+
+      - name: Debug Environment Variables
+        run: |
+          echo "VM IP: $AZURE_VM_IP"
+          echo "VM Username: $AZURE_VM_USERNAME"
+
+      - name: Test WinRM Connectivity
+        run: |
+          echo "Testing WinRM connectivity"
+          curl http://${{ secrets.AZURE_VM_IP }}:5985/wsman
+
+      - name: Run WinRM Commands on VM
+        run: |
+          pip install pywinrm
+          python run_winrm.py
+
+  frontend:
+    name: Frontend Build and Deploy
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout frontend code
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '16.x'
+
+      - name: Install dependencies
+        working-directory: ./chatbot/Front-End
+        run: npm install
+
+      - name: Build frontend application
+        working-directory: ./chatbot/Front-End
+        run: npm run build
+
+      - name: Test WinRM Connectivity
+        run: |
+          echo "Testing WinRM connectivity"
+          curl http://${{ secrets.AZURE_VM_IP }}:5985/wsman
+
+      - name: Run WinRM Commands on VM
+        run: |
+          pip install pywinrm
+          python run_winrm.py
